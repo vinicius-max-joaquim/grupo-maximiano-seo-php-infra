@@ -18,9 +18,18 @@ RUN docker-php-ext-install \
     mbstring \
     zip
 
-# Usuário SFTP da agência, compartilhando o grupo do Apache
+# Reduz a superfície disponível para código PHP enviado por SFTP.
+# O site continua podendo usar o próprio volume e arquivos temporários.
+RUN { \
+      echo 'expose_php = Off'; \
+      echo 'open_basedir = /sftp/agencia/site:/tmp'; \
+      echo 'disable_functions = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,link,symlink'; \
+    } > /usr/local/etc/php/conf.d/zz-security.ini
+
+# Usuário SFTP da agência, compartilhando o grupo do Apache.
+# O home é /site dentro do chroot; ele não deve existir fora do chroot.
 RUN useradd \
-    --create-home \
+    --no-create-home \
     --home-dir /site \
     --shell /usr/sbin/nologin \
     --gid www-data \
@@ -30,10 +39,13 @@ RUN useradd \
 # /sftp/agencia PRECISA permanecer root:root e não gravável pelo usuário SFTP.
 RUN mkdir -p \
     /sftp/agencia/site \
+    /etc/ssh/authorized_keys \
     /run/sshd \
     /var/log/supervisor \
     && chown root:root /sftp /sftp/agencia \
-    && chmod 755 /sftp /sftp/agencia
+    && chmod 755 /sftp /sftp/agencia \
+    && chown root:root /etc/ssh/authorized_keys \
+    && chmod 755 /etc/ssh/authorized_keys
 
 COPY apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 COPY ssh/sshd_config /etc/ssh/sshd_config

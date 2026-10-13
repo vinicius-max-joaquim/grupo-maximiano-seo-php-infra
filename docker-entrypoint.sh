@@ -4,6 +4,7 @@ set -euo pipefail
 SITE_DIR="/sftp/agencia/site"
 CHROOT_DIR="/sftp/agencia"
 SFTP_USER="agencia-seo"
+AUTHORIZED_KEYS_FILE="/etc/ssh/authorized_keys/${SFTP_USER}"
 
 echo "[seo-php] Inicializando container..."
 
@@ -13,10 +14,11 @@ chown root:root /sftp "$CHROOT_DIR"
 chmod 755 /sftp "$CHROOT_DIR"
 
 # O volume Railway deve ser montado exatamente em /sftp/agencia/site.
-# A agência escreve; Apache (www-data) lê.
-chown -R "$SFTP_USER":www-data "$SITE_DIR"
-find "$SITE_DIR" -type d -exec chmod 2775 {} \; || true
-find "$SITE_DIR" -type f -exec chmod 0664 {} \; || true
+# A agência escreve; Apache (www-data) lê, mas não ganha escrita por padrão.
+# -h impede que um link simbólico malicioso altere o dono do alvo fora do volume.
+chown -hR "$SFTP_USER":www-data "$SITE_DIR"
+find "$SITE_DIR" -type d -exec chmod 2755 {} \;
+find "$SITE_DIR" -type f -exec chmod 0644 {} \;
 
 # Página inicial apenas se o volume estiver vazio.
 if [ -z "$(find "$SITE_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
@@ -26,7 +28,7 @@ header('Content-Type: text/html; charset=UTF-8');
 echo '<h1>SEO PHP OK</h1><p>Ambiente PHP 8.3 ativo. Conteúdo gerenciado via SFTP.</p>';
 PHP
   chown "$SFTP_USER":www-data "$SITE_DIR/index.php"
-  chmod 0664 "$SITE_DIR/index.php"
+  chmod 0644 "$SITE_DIR/index.php"
 fi
 
 # Autenticação por senha opcional.
@@ -34,19 +36,27 @@ if [ -n "${AGENCIA_SEO_PASSWORD:-}" ]; then
   echo "${SFTP_USER}:${AGENCIA_SEO_PASSWORD}" | chpasswd
   echo "[seo-php] Autenticação SFTP por senha habilitada."
 else
-  # Bloqueia senha se nenhuma senha foi configurada.
-  passwd -l "$SFTP_USER" >/dev/null 2>&1 || true
+  # Um hash impossível desabilita senha sem marcar a conta como bloqueada.
+  # Contas bloqueadas pelo passwd -l também são recusadas para chave pública.
+  usermod --password '*' "$SFTP_USER"
   echo "[seo-php] AGENCIA_SEO_PASSWORD não definida; senha SFTP desabilitada."
 fi
 
-# Autenticação por chave SSH opcional.
+# A chave fica fora do DocumentRoot e é recriada a partir da variável a cada deploy.
+# AuthorizedKeysFile é lido pelo sshd antes da entrada no chroot.
 if [ -n "${AGENCIA_SEO_AUTHORIZED_KEY:-}" ]; then
-  mkdir -p "$SITE_DIR/.ssh"
-  printf '%s\n' "$AGENCIA_SEO_AUTHORIZED_KEY" > "$SITE_DIR/.ssh/authorized_keys"
-  chown -R "$SFTP_USER":www-data "$SITE_DIR/.ssh"
-  chmod 700 "$SITE_DIR/.ssh"
-  chmod 600 "$SITE_DIR/.ssh/authorized_keys"
+  install -d -o root -g root -m 0755 "$(dirname "$AUTHORIZED_KEYS_FILE")"
+  printf '%s\n' "$AGENCIA_SEO_AUTHORIZED_KEY" > "$AUTHORIZED_KEYS_FILE"
+  chown root:root "$AUTHORIZED_KEYS_FILE"
+  chmod 0644 "$AUTHORIZED_KEYS_FILE"
   echo "[seo-php] Chave pública SFTP configurada."
+else
+  rm -f "$AUTHORIZED_KEYS_FILE"
+fi
+
+if [ -z "${AGENCIA_SEO_PASSWORD:-}" ] && [ -z "${AGENCIA_SEO_AUTHORIZED_KEY:-}" ]; then
+  echo "[seo-php] ERRO: configure AGENCIA_SEO_PASSWORD e/ou AGENCIA_SEO_AUTHORIZED_KEY." >&2
+  exit 1
 fi
 
 # Gera host keys do SSH se necessário.
@@ -55,6 +65,9 @@ ssh-keygen -A
 # Valida configurações antes de iniciar.
 apache2ctl configtest
 /usr/sbin/sshd -t
+
+# Apache/PHP não precisam herdar as credenciais usadas na inicialização.
+unset AGENCIA_SEO_PASSWORD AGENCIA_SEO_AUTHORIZED_KEY
 
 echo "[seo-php] Apache DocumentRoot: $SITE_DIR"
 echo "[seo-php] SFTP interno: porta 22"

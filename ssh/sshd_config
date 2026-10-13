@@ -10,8 +10,11 @@ PermitRootLogin no
 PermitEmptyPasswords no
 PasswordAuthentication yes
 PubkeyAuthentication yes
+AuthorizedKeysFile /etc/ssh/authorized_keys/%u
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
+StrictModes yes
+PermitUserEnvironment no
 
 X11Forwarding no
 AllowAgentForwarding no
@@ -25,7 +28,8 @@ AllowUsers agencia-seo
 
 Match User agencia-seo
     ChrootDirectory /sftp/agencia
-    ForceCommand internal-sftp -d /site
+    ForceCommand internal-sftp -d /site -u 0022 -P symlink,hardlink
+    PermitTTY no
     X11Forwarding no
     AllowAgentForwarding no
     AllowTcpForwarding no

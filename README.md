@@ -115,7 +115,15 @@ AGENCIA_SEO_AUTHORIZED_KEY=ssh-ed25519 AAAA...
 
 Pode usar ambos.
 
+Quando somente a chave é usada, a conta continua ativa para autenticação
+criptográfica, mas recebe um hash de senha impossível; login por senha
+permanece indisponível.
+
 Nunca coloque senha no Dockerfile ou no GitHub.
+
+O container falha de forma segura na inicialização se nenhuma das duas
+variáveis estiver configurada. A chave pública é materializada em
+`/etc/ssh/authorized_keys/agencia-seo`, fora do volume e do `DocumentRoot`.
 
 ### 4. HTTP
 
@@ -221,6 +229,19 @@ O usuário `agencia-seo`:
 - não tem X11;
 - não acessa outros serviços Railway;
 - não acessa Postgres, MariaDB, WordPress, frontend ou backend.
+
+Diretórios enviados via SFTP ficam normalmente com modo `2755` e arquivos
+com modo `0644`: a agência mantém escrita por ser a proprietária, enquanto o
+Apache recebe somente leitura pelo grupo `www-data`. O Apache desabilita
+listagem de diretórios e aceita links simbólicos apenas quando o link e o
+destino pertencem ao mesmo usuário. O SFTP também bloqueia a criação de links
+simbólicos e hard links, evitando atalhos para fora do volume.
+
+Antes de iniciar o Apache, o entrypoint remove as variáveis de autenticação do
+ambiente herdado. O PHP usa `open_basedir` limitado ao volume e a `/tmp`, não
+expõe sua versão no header e desabilita funções de execução de processos e de
+criação de links. Essas restrições devem ser consideradas ao homologar a base
+PHP da agência.
 
 ## Observação importante
 
