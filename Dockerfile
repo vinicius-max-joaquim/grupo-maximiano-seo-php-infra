@@ -9,7 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libonig-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN a2enmod rewrite headers expires
+# mod_php exige prefork. Desabilitamos explicitamente os outros MPMs para
+# impedir conflito caso o ambiente de build/runtime habilite mais de um.
+RUN a2dismod -f mpm_event mpm_worker \
+    && a2enmod mpm_prefork rewrite headers expires
 
 RUN docker-php-ext-install \
     mysqli \

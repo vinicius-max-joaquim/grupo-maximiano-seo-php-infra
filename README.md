@@ -13,6 +13,9 @@ Este repositório versiona **somente a infraestrutura** do container:
 - configuração do Apache
 - configuração do SSH
 
+O Apache usa exclusivamente `mpm_prefork`, compatível com o `mod_php`; os
+MPMs `event` e `worker` são desabilitados no build e novamente no entrypoint.
+
 O conteúdo PHP mantido pela agência **não fica neste repositório**.
 
 Os arquivos da agência ficam em um **Railway Volume** montado em:

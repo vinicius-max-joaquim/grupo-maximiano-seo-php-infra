@@ -62,6 +62,10 @@ fi
 # Gera host keys do SSH se necessário.
 ssh-keygen -A
 
+# Garante um único MPM compatível com mod_php também no runtime.
+a2dismod -f mpm_event mpm_worker >/dev/null 2>&1 || true
+a2enmod mpm_prefork >/dev/null
+
 # Valida configurações antes de iniciar.
 apache2ctl configtest
 /usr/sbin/sshd -t
